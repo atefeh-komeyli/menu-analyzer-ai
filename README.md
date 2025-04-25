@@ -2,7 +2,6 @@
 
 A smart restaurant menu assistant that helps you choose the perfect dish based on your preferences.
 
-![Menu Analyzer in action](images/image.png)
 
 ## Overview
 
@@ -20,6 +19,8 @@ Perfect for tourists, food enthusiasts, or anyone facing decision paralysis when
 - 💬 **Interactive Q&A**: Answers 5 personalized questions to understand your preferences
 - 🍽️ **Smart Recommendations**: Suggests 3 dishes ranked by how well they match your profile
 - 🌐 **Multi-language Support**: Works in English, Arabic, German, Spanish, French, Persian, and Italian
+
+![Menu Analyzer in action](images/image.png)
 
 ## Installation
 
