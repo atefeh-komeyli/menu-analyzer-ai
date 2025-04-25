@@ -2,7 +2,7 @@
 
 A smart restaurant menu assistant that helps you choose the perfect dish based on your preferences.
 
-![Menu Analyzer in action](images/menu-screenshot.png)
+![Menu Analyzer in action](images/image.png)
 
 ## Overview
 
