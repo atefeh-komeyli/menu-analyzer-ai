@@ -8,6 +8,7 @@ import gradio as gr
 from PIL import Image
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
+from langchain_community.tools.bearly.tool import strip_markdown_code
 
 # Configure logging
 logging.basicConfig(
@@ -19,7 +20,7 @@ logger = logging.getLogger("menu_analyzer")
 
 LLM_MODEL = os.getenv("OPENAI_API_MODEL")
 MAX_QUESTIONS = 5
-MAX_MENU_ITEMS = 50
+MAX_MENU_ITEMS = 100
 
 # === HELPER FUNCTIONS ===
 
@@ -117,7 +118,7 @@ def recommend_dishes(dishes: List[Dict[str, str]], question_answer_history: List
     user_profile = "\n".join(f"A{i + 1}: {answer}" for i, answer in enumerate(user_answers))
     system_message = SystemMessage(content=f"Reply ONLY in {language} as a helpful waiter.")
     prompt_text = (
-        "Using the menu and guest profile, pick the TOP 3 matching dishes (ranked) and justify each in ≤30 words. Respond markdown.\n\n"
+        "Using the menu and guest profile, pick the TOP 3 matching dishes (ranked) and justify each in ≤30 words. Respond markdown without backticks and without any beginning or ending notes.\n\n"
         f"Menu:\n{formatted_menu}\n\nGuest:\n{user_profile}"
     )
     
@@ -148,7 +149,7 @@ def build_ui():
                     label="Menu photo(s)", type="pil", height=600
                 )
                 language_dropdown = gr.Dropdown(
-                    label="Language",
+                    label="Conversation language",
                     choices=[
                         "English",
                         "فارسی",
@@ -163,7 +164,7 @@ def build_ui():
                 start_button = gr.Button("Start", variant="primary")
                 
             with gr.Column(scale=2):
-                chat_interface = gr.Chatbot(height=700, show_copy_button=True)
+                chat_interface = gr.Chatbot(height=700)
                 with gr.Row():
                     user_input = gr.Textbox(
                         show_label=False,
