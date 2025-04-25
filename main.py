@@ -6,9 +6,8 @@ import logging
 from typing import List, Dict, Any
 import gradio as gr
 from PIL import Image
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
-from langchain_community.tools.bearly.tool import strip_markdown_code
 
 # Configure logging
 logging.basicConfig(
