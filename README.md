@@ -1,69 +1,109 @@
 # Menu Analyzer AI
 
-A smart restaurant menu assistant that helps you choose the perfect dish based on your preferences.
-
-
-## Overview
-
-Menu Analyzer AI is an interactive tool that:
-1. Analyzes restaurant menu photos
-2. Asks you personalized questions about your preferences
-3. Recommends the top 3 dishes tailored to your tastes
-
-Perfect for tourists, food enthusiasts, or anyone facing decision paralysis when ordering!
+An AI-powered menu analysis and recommendation system that extracts menu items from images and provides personalized dish recommendations based on interactive Q&A.
 
 ## Features
 
-- 📸 **Menu Photo Recognition**: Upload one or multiple menu photos
-- 🔍 **Intelligent Extraction**: Automatically identifies dishes, descriptions, and prices
-- 💬 **Interactive Q&A**: Answers 5 personalized questions to understand your preferences
-- 🍽️ **Smart Recommendations**: Suggests 3 dishes ranked by how well they match your profile
-- 🌐 **Multi-language Support**: Works in English, Arabic, German, Spanish, French, Persian, and Italian
+- **Menu Text Extraction**: Upload images of restaurant menus to extract dish names, descriptions, and prices.
+- **Interactive Recommendation System**: Engage in a Q&A conversation to refine food preferences.
+- **Personalized Dish Recommendations**: Receive tailored dish recommendations based on extracted menu items and conversation history.
+- **Multi-language Support**: Get recommendations and conduct conversations in different languages.
+- **Dual Interface**: Run as either an API server or with a Gradio web interface.
 
-![Menu Analyzer in action](images/image.png)
+# Example of Gradio UI
+![MENU ANALYZER AI - Gradio UI](./images/gradio.png) 
+# Example of Swagger UI
+![MENU ANALYZER AI - API SWAGGER](./images/swagger.png) 
+
+## Requirements
+
+- Python 3.12+
+- uv package manager
 
 ## Installation
 
-1. Clone this repository:
+1. Clone the repository:
+
 ```bash
 git clone https://github.com/yourusername/menu-analyzer-ai.git
 cd menu-analyzer-ai
 ```
+2. Install uv
 
-2. Install the required dependencies:
+Install `uv`, a fast Python package manager:  
+Follow the official instructions here: [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
 
-using uv:
+For example, on macOS and Linux:
 ```bash
-uv sync 
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-3. Create a `.env` file in the root directory with your OpenAI credentials:
-```
-OPENAI_API_KEY=your-api-key
-OPENAI_API_MODEL=gpt-4.1-nano
-```
+3. Install Project Dependencies
 
-## Usage
-
-1. Start the application:
+Once `uv` is installed, sync the project environment:
 ```bash
-uv run main.py
+uv sync
 ```
 
-2. Open the provided local URL in your browser (typically http://127.0.0.1:7860)
+4. Setup environment variables:
+   - Create a `.env` file with your OpenAI API key:
+   ```
+   OPENAI_API_KEY=your_api_key_here
+   OPENAI_API_MODEL=gpt-4.1-nano  # or your preferred model
+   ```
 
-3. Upload menu photo(s)
+## Running the Application
 
-4. Select your preferred language
+### Option 1: Run with Gradio Web Interface
 
-5. Click "Start" to begin the conversation
+```bash
+uv run main.py --mode gradio [--port PORT] [--host HOST] [--share]
+```
 
-6. Answer the assistant's questions honestly about your preferences
+### Option 2: Run as API Server
 
-7. Receive personalized dish recommendations!
+```bash
+uv run main.py --mode api [--port PORT] [--host HOST]
+```
 
+## API Endpoints
 
-## Privacy
+| Endpoint | Description |
+|---------|-------------|
+| `POST /extract_menu` | Extract dishes from menu images |
+| `POST /next_question` | Generate the next personalized question |
+| `POST /recommend` | Get dish recommendations based on preferences |
+| `GET /health` | API health check |
 
-Your menu photos and conversation are processed via the OpenAI API but are not permanently stored.
+See example requests/responses in the API documentation when running the server.
 
+## Testing
+
+Run the test suite:
+
+```bash
+# Run all tests
+uv run -m pytest
+```
+
+### Running Skipped Tests
+
+Some end-to-end API tests are skipped by default. To run these tests:
+
+1. Start the API server in a separate terminal:
+   ```bash
+   uv run main.py --mode api
+   ```
+
+2. Run the tests with the API_BASE_URL environment variable:
+   ```bash
+   API_BASE_URL=http://localhost:8000 uv run -m pytest tests/test_api_e2e.py
+   ```
+
+The test suite includes:
+- API endpoint tests
+- End-to-end API tests
+- LLM wrapper tests
+- Validation and environment tests
+
+Mocks are used for external dependencies (OpenAI API, image processing) to ensure tests run without actual API calls.

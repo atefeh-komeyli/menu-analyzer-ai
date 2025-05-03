@@ -1,241 +1,74 @@
-import base64
+import argparse
 import os
-import io
-import json
 import logging
-from typing import List, Dict, Any
-import gradio as gr
-from PIL import Image
-from langchain_community.chat_models import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+import uvicorn
+from dotenv import load_dotenv
+from api import app as fastapi_app
+from gradio_ui import build_ui
 
 # Configure logging
 logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s - %(levelname)-5s| %(message)s",
-    datefmt="%H:%M:%S",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("menu_analyzer")
 
-LLM_MODEL = os.getenv("OPENAI_API_MODEL")
+load_dotenv()
+
+if "OPENAI_API_KEY" not in os.environ:
+    logger.error("OPENAI_API_KEY environment variable not set")
+    raise EnvironmentError("OPENAI_API_KEY must be set as an environment variable")
+
+# Constants
+DEFAULT_HOST = "0.0.0.0"
+DEFAULT_PORT = 8000
 MAX_QUESTIONS = 5
 MAX_MENU_ITEMS = 100
 
-# === HELPER FUNCTIONS ===
 
-def convert_to_pil_image(image_input):
-    if isinstance(image_input, Image.Image):
-        return image_input
-    if isinstance(image_input, (list, tuple)) and image_input and isinstance(image_input[0], Image.Image):
-        return image_input[0]
-    raise TypeError("Unsupported image type from Gallery")
+def run_gradio(host=DEFAULT_HOST, port=DEFAULT_PORT, share=False):
+    """Start the Gradio web interface"""
+    logger.info(f"Starting Gradio web interface on {host}:{port}")
+    app = build_ui()  # Use build_ui from renamed gradio_ui.py
+    app.launch(server_name=host, server_port=int(port), share=share)
 
 
-def convert_to_base64(image):
-    buffer = io.BytesIO()
-    convert_to_pil_image(image).save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode()
+def run_api(host=DEFAULT_HOST, port=DEFAULT_PORT):
+    """Start the FastAPI server"""
+    logger.info(f"Starting FastAPI server on {host}:{port}")
+    uvicorn.run(fastapi_app, host=host, port=int(port))
 
 
-# === LLM WRAPPERS ===
-
-
-def extract_menu_items(menu_images: List[Any]) -> List[Dict[str, str]]:
-    if not menu_images:
-        logger.warning("No menu images provided for extraction")
-        return []
-    
-    logger.info(f"Processing {len(menu_images)} menu images for extraction")
-    image_parts = [
-        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{convert_to_base64(img)}"}}
-        for img in menu_images[:MAX_QUESTIONS]
-    ]
-    system_message = SystemMessage(
-        content=("""
-            You are an advanced menu parser. From one or more restaurant-menu photos, output ONLY a raw minified JSON array where each element has: 
-            `name`, `description` - **every textual or symbolic detail** that accompanies the dish: ingredients, cooking style, allergens, icons (e.g. 🌶️ for spicy, 🥦 vegetarian), dietary_tags,calories, region, side notes, etc. Consolidate them into one sentence in the _original menu language. `price` (string with currency)
-                 """
-        )
+def main():
+    parser = argparse.ArgumentParser(
+        description="Menu Analyzer AI - Run in Gradio or API mode"
     )
-    human_message = HumanMessage(content=[*image_parts, {"type": "text", "text": "Extract now."}])
-    
-    logger.info("Calling LLM to extract menu items")
-    try:
-        response_text = ChatOpenAI(model=LLM_MODEL, temperature=0).invoke([system_message, human_message]).content
-        menu_items = json.loads(response_text)[:MAX_MENU_ITEMS]
-        logger.info(f"Successfully extracted {len(menu_items)} menu items")
-        return menu_items
-    except json.JSONDecodeError:
-        logger.warning("Failed to parse JSON response, falling back to line-by-line parsing")
-        parsed_items = [
-            {"name": line.strip("- •"), "description": ""}
-            for line in response_text.split("\n")
-            if line.strip()
-        ][:MAX_MENU_ITEMS]
-        logger.info(f"Extracted {len(parsed_items)} items using fallback method")
-        return parsed_items
-    except Exception as e:
-        logger.error(f"Error extracting menu items: {str(e)}")
-        return []
-
-
-def generate_next_question(dishes: List[Dict[str, str]], question_answer_history: List[str], language: str) -> str:
-    question_number = len(question_answer_history) // 2 + 1
-    logger.info(f"Generating question #{question_number} in {language}")
-    
-    menu_summary = "; ".join(f"{dish['name']}: {dish.get('description', '')}" for dish in dishes)
-    conversation_history = "\n".join(
-        f"Q{i + 1}: {question}\nA{i + 1}: {answer}"
-        for i, (question, answer) in enumerate(zip(question_answer_history[0::2], question_answer_history[1::2]))
+    parser.add_argument(
+        "--mode",
+        choices=["gradio", "api"],
+        default="gradio",
+        help="Run mode: 'gradio' for web interface or 'api' for API server",
     )
-    system_message = SystemMessage(content=f"Reply ONLY in {language} as an attentive waiter.")
-    prompt_text = (
-        f"Menu excerpt: {menu_summary}.\n{conversation_history}\n"
-        "Ask ONE concise new question that targets an undecided preference. Avoid repeating topics. Return only the sentence."
+    parser.add_argument(
+        "--host", default=DEFAULT_HOST, help=f"Host address (default: {DEFAULT_HOST})"
     )
-    
-    try:
-        question_response = (
-            ChatOpenAI(model=LLM_MODEL, temperature=0.6)
-            .invoke([system_message, HumanMessage(content=prompt_text)])
-            .content.strip()
-        )
-        if not question_response.endswith("?"):
-            question_response += "?"
-        logger.info(f"Generated question: {question_response[:50]}...")
-        return question_response
-    except Exception as e:
-        logger.error(f"Error generating question: {str(e)}")
-        return "What would you like to eat today?"
-
-
-def recommend_dishes(dishes: List[Dict[str, str]], question_answer_history: List[str], language: str) -> str:
-    logger.info(f"Generating dish recommendations in {language} based on {len(dishes)} dishes and {len(question_answer_history)//2} Q&A pairs")
-    
-    user_answers = question_answer_history[1::2]
-    formatted_menu = "\n".join(f"- {dish['name']}: {dish.get('description', '')}" for dish in dishes)
-    user_profile = "\n".join(f"A{i + 1}: {answer}" for i, answer in enumerate(user_answers))
-    system_message = SystemMessage(content=f"Reply ONLY in {language} as a helpful waiter.")
-    prompt_text = (
-        "Using the menu and guest profile, pick the TOP 3 matching dishes (ranked) and justify each in ≤30 words. Respond markdown without backticks and without any beginning or ending notes.\n\n"
-        f"Menu:\n{formatted_menu}\n\nGuest:\n{user_profile}"
+    parser.add_argument(
+        "--port", default=DEFAULT_PORT, help=f"Port number (default: {DEFAULT_PORT})"
     )
-    
-    try:
-        response = (
-            ChatOpenAI(model=LLM_MODEL, temperature=0.4)
-            .invoke([system_message, HumanMessage(content=prompt_text)])
-            .content
-        )
-        logger.info("Successfully generated dish recommendations")
-        return response
-    except Exception as e:
-        logger.error(f"Error generating recommendations: {str(e)}")
-        return "I apologize, but I couldn't generate recommendations at this time."
+    parser.add_argument(
+        "--share",
+        action="store_true",
+        help="Create a public URL for sharing the Gradio interface",
+    )
+    args = parser.parse_args()
 
-
-# === USER INTERFACE ===
-
-
-def build_ui():
-    with gr.Blocks(
-        css="footer{display:none}; .gradio-container{max-width:900px;margin:auto}"
-    ) as demo:
-        gr.Markdown("### 📸 Not Sure What to Order? Let AI Recommend!")
-        with gr.Row(equal_height=True):
-            with gr.Column(scale=1):
-                menu_gallery = gr.Gallery(
-                    label="Menu photo(s)", type="pil", height=600
-                )
-                language_dropdown = gr.Dropdown(
-                    label="Conversation language",
-                    choices=[
-                        "English",
-                        "فارسی",
-                        "Deutsch",
-                        "Español",
-                        "Français",
-                        "العربية",
-                        "Italiano",
-                    ],
-                    value="English",
-                )
-                start_button = gr.Button("Start", variant="primary")
-                
-            with gr.Column(scale=2):
-                chat_interface = gr.Chatbot(height=700)
-                with gr.Row():
-                    user_input = gr.Textbox(
-                        show_label=False,
-                        placeholder="Type answer & press Enter",
-                        container=False,
-                        scale=5,
-                    )
-                    send_button = gr.Button("Send", scale=1)
-
-        app_state = gr.State(
-            value={"stage": "await", "lang": "English", "dishes": [], "qa": []}
-        )
-
-        def initialize_conversation(selected_language, menu_images, current_state):
-            logger.info(f"Initializing conversation in {selected_language}")
-            current_state.update(lang=selected_language)
-            
-            if not menu_images:
-                logger.warning("No menu images provided")
-                return gr.Warning("Please upload menu photo(s)."), current_state
-                
-            extracted_dishes = extract_menu_items(menu_images)
-            if not extracted_dishes:
-                logger.warning("No dishes could be extracted from images")
-                return gr.Warning("Couldn't parse dishes."), current_state
-                
-            logger.info(f"Successfully extracted {len(extracted_dishes)} dishes")
-            first_question = generate_next_question(extracted_dishes, [], selected_language)
-            current_state.update(stage="asking", dishes=extracted_dishes, qa=[first_question])
-            logger.info("Conversation initialized successfully")
-            return gr.update(value=[[None, first_question]]), current_state
-
-        start_button.click(initialize_conversation, [language_dropdown, menu_gallery, app_state], [chat_interface, app_state])
-
-        def process_conversation(user_message, current_state):
-            if current_state["stage"] != "asking":
-                logger.debug("Ignoring input - conversation not in asking stage")
-                return current_state, gr.update()
-                
-            logger.info("Processing user response")
-            question_answer_list = current_state["qa"] + [user_message]
-            current_state["qa"] = question_answer_list
-            
-            if len(question_answer_list) // 2 >= MAX_QUESTIONS:
-                logger.info(f"Reached max questions ({MAX_QUESTIONS}), generating final recommendations")
-                bot_response = recommend_dishes(current_state["dishes"], question_answer_list, current_state["lang"])
-                current_state["stage"] = "done"
-                logger.info("Conversation completed")
-            else:
-                question_number = len(question_answer_list) // 2 + 1
-                logger.info(f"Generating question {question_number}/{MAX_QUESTIONS}")
-                bot_response = generate_next_question(current_state["dishes"], question_answer_list, current_state["lang"])
-                
-            question_answer_list.append(bot_response)
-            conversation_pairs = [[None, question_answer_list[0]]] + [[question_answer_list[i], question_answer_list[i + 1]] for i in range(1, len(question_answer_list), 2)]
-            return current_state, gr.update(value=conversation_pairs)
-
-        user_input.submit(process_conversation, [user_input, app_state], [app_state, chat_interface]).then(
-            lambda: "", None, user_input
-        )
-        send_button.click(process_conversation, [user_input, app_state], [app_state, chat_interface]).then(
-            lambda: "", None, user_input
-        )
-    return demo
+    # Start the application in the selected mode
+    if args.mode == "gradio":
+        run_gradio(host=args.host, port=args.port, share=args.share)
+    else:  # args.mode == "api"
+        run_api(host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
-    logger.info("Starting Menu Analyzer AI application")
-    if "OPENAI_API_KEY" not in os.environ:
-        logger.error("OPENAI_API_KEY environment variable not set")
-        raise EnvironmentError("Set OPENAI_API_KEY")
-    
-    logger.info(f"Using LLM model: {LLM_MODEL or 'default'}")
-    logger.info("Launching Gradio interface")
-    build_ui().launch()
+    main()
