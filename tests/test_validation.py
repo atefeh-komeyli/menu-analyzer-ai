@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 from langchain.schema import AIMessage
 from PIL import Image
 import main
+import ai
 
 
 def test_max_menu_items_limit():
@@ -11,12 +12,12 @@ def test_max_menu_items_limit():
     # Create a list of sample menu items larger than MAX_MENU_ITEMS
     sample_large_menu = [
         {"name": f"Item {i}", "description": "Test"}
-        for i in range(main.MAX_MENU_ITEMS + 10)
+        for i in range(ai.MAX_MENU_ITEMS + 10)
     ]
 
     with (
-        patch("main.ChatOpenAI") as mock_chat,
-        patch("main.convert_to_base64") as mock_base64,
+        patch("ai.ChatOpenAI") as mock_chat,
+        patch("ai.convert_to_base64") as mock_base64,
     ):
         # Mock the base64 conversion to avoid image processing issues
         mock_base64.return_value = "mocked_base64_string"
@@ -32,10 +33,10 @@ def test_max_menu_items_limit():
         sample_image = Image.new("RGB", (10, 10))
 
         # Call extract_menu_items with sample input
-        result = main.extract_menu_items([sample_image])
+        result = ai.extract_menu_items([sample_image])
 
         # Verify the result is limited to MAX_MENU_ITEMS
-        assert len(result) == main.MAX_MENU_ITEMS
+        assert len(result) == ai.MAX_MENU_ITEMS
 
 
 def test_max_questions_limit():
@@ -43,15 +44,15 @@ def test_max_questions_limit():
     # We can infer this from the code logic in process_conversation
     # But we can't directly test it since process_conversation is a nested function
     # This is a meta-test to confirm the constant exists
-    assert hasattr(main, "MAX_QUESTIONS")
-    assert main.MAX_QUESTIONS > 0
+    assert hasattr(ai, "MAX_QUESTIONS")
+    assert ai.MAX_QUESTIONS > 0
 
 
 def test_extract_menu_items_json_fallback():
     """Test the fallback parsing when JSON parsing fails."""
     with (
-        patch("main.ChatOpenAI") as mock_chat,
-        patch("main.convert_to_base64") as mock_base64,
+        patch("ai.ChatOpenAI") as mock_chat,
+        patch("ai.convert_to_base64") as mock_base64,
     ):
         # Mock the base64 conversion to avoid image processing issues
         mock_base64.return_value = "mocked_base64_string"
@@ -71,7 +72,7 @@ def test_extract_menu_items_json_fallback():
 
         for test_case in test_cases:
             mock_instance.invoke.return_value = AIMessage(content=test_case)
-            result = main.extract_menu_items([sample_image])
+            result = ai.extract_menu_items([sample_image])
 
             # Verify fallback parsing worked
             assert isinstance(result, list)
@@ -91,9 +92,9 @@ def test_convert_to_pil_image_validations():
 
     for invalid_input in invalid_inputs:
         with pytest.raises(TypeError):
-            main.convert_to_pil_image(invalid_input)
+            ai.convert_to_pil_image(invalid_input)
 
     # Test with valid PIL image
     valid_image = Image.new("RGB", (10, 10))
-    result = main.convert_to_pil_image(valid_image)
+    result = ai.convert_to_pil_image(valid_image)
     assert result == valid_image

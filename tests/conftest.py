@@ -24,7 +24,7 @@ def sample_image_list(sample_pil_image):
 @pytest.fixture
 def mock_openai():
     """Mock the ChatOpenAI class."""
-    with patch("main.ChatOpenAI") as mock_chat:
+    with patch("ai.ChatOpenAI") as mock_chat:
         mock_instance = MagicMock()
         mock_chat.return_value = mock_instance
         yield mock_chat
